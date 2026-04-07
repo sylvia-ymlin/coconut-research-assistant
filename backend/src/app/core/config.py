@@ -88,6 +88,11 @@ class Configuration(BaseModel):
         title="LLM Model ID",
         description="Optional model identifier for custom OpenAI-compatible services",
     )
+    sessions_db_path: str = Field(
+        default="./data/research_sessions.sqlite3",
+        title="Sessions Database Path",
+        description="Path to the local SQLite file used for session history",
+    )
 
     @classmethod
     def from_env(cls, overrides: Optional[dict[str, Any]] = None) -> "Configuration":
@@ -120,6 +125,7 @@ class Configuration(BaseModel):
             "search_api": os.getenv("SEARCH_API"),
             "enable_notes": os.getenv("ENABLE_NOTES"),
             "notes_workspace": os.getenv("NOTES_WORKSPACE"),
+            "sessions_db_path": os.getenv("SESSIONS_DB_PATH"),
         }
 
         for key, value in env_aliases.items():

@@ -1,3 +1,8 @@
+import type {
+  ResearchSessionDetail,
+  ResearchSessionSummary
+} from "../types/research";
+
 const baseURL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -13,6 +18,26 @@ export interface ResearchStreamEvent {
 
 export interface StreamOptions {
   signal?: AbortSignal;
+}
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(errorText || `请求失败，状态码：${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+export async function getResearchSessions(): Promise<ResearchSessionSummary[]> {
+  const response = await fetch(`${baseURL}/sessions`);
+  return parseJsonResponse<ResearchSessionSummary[]>(response);
+}
+
+export async function getResearchSession(
+  sessionId: number
+): Promise<ResearchSessionDetail> {
+  const response = await fetch(`${baseURL}/sessions/${sessionId}`);
+  return parseJsonResponse<ResearchSessionDetail>(response);
 }
 
 export async function runResearchStream(

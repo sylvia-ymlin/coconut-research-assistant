@@ -11,6 +11,7 @@ It combines agent orchestration, streaming execution, structured task handling, 
 - streams progress updates to the frontend in real time
 - tracks task status, sources, notes, and tool calls
 - synthesizes a final Markdown report from intermediate results
+- persists research sessions locally so past runs can be reopened from history
 
 ## Screenshots
 
@@ -80,7 +81,7 @@ Current frontend responsibilities:
 
 - submit research topics and optional search backend selection
 - subscribe to streaming backend events
-- display task timeline, task-level details, tool calls, and final report
+- display task timeline, task-level details, tool calls, final report, and session history
 
 ## Tech Stack
 
@@ -97,17 +98,18 @@ Completed:
 - frontend split into reusable components
 - backend startup verified locally
 - frontend production build verified locally
+- local session history backed by SQLite
+- history list and historical session detail viewer in the frontend
 
 In progress:
 
 - tightening dependency management
-- preparing framework integration boundaries for future abstraction
+- expanding automated backend coverage
 
 Planned:
 
-- add session/state persistence
-- add tests for backend workflow pieces
 - improve deployment and demo documentation
+- deepen session recovery and long-lived state handling
 
 ## Local Development
 
@@ -128,6 +130,7 @@ Notes:
 - This project currently uses `hello-agents` as the underlying agent runtime.
 - If startup fails because of a missing dependency in the chain, install the missing package in the same environment and retry.
 - To enable stronger web research results, configure at least one search provider such as `TAVILY_API_KEY` in `backend/.env`.
+- Session history is stored locally at `SESSIONS_DB_PATH` and the generated SQLite file is ignored by git.
 
 ### Frontend
 
@@ -150,8 +153,10 @@ Main backend endpoints:
 - `GET /healthz`
 - `POST /research`
 - `POST /research/stream`
+- `GET /sessions`
+- `GET /sessions/{id}`
 
-The streaming endpoint is used by the frontend to render incremental workflow progress.
+The streaming endpoint is used by the frontend to render incremental workflow progress. Session endpoints power the history sidebar and historical report views.
 
 ## Repository Goal
 

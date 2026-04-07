@@ -2,6 +2,7 @@
 
 import operator
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional
 
 from typing_extensions import Annotated
@@ -36,6 +37,7 @@ class SummaryState:
     structured_report: Optional[str] = field(default=None)
     report_note_id: Optional[str] = field(default=None)
     report_note_path: Optional[str] = field(default=None)
+    session_id: Optional[int] = field(default=None)
 
 
 @dataclass(kw_only=True)
@@ -48,4 +50,26 @@ class SummaryStateOutput:
     running_summary: str = field(default=None)  # Backward-compatible文本
     report_markdown: Optional[str] = field(default=None)
     todo_items: List[TodoItem] = field(default_factory=list)
+    session_id: Optional[int] = field(default=None)
 
+
+@dataclass(kw_only=True)
+class ResearchSessionSummary:
+    session_id: int
+    topic: str
+    status: str
+    search_api: Optional[str] = field(default=None)
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime = field(default_factory=datetime.utcnow)
+    task_count: int = field(default=0)
+    completed_task_count: int = field(default=0)
+    report_available: bool = field(default=False)
+
+
+@dataclass(kw_only=True)
+class ResearchSessionDetail(ResearchSessionSummary):
+    report_markdown: str = field(default="")
+    error_detail: Optional[str] = field(default=None)
+    report_note_id: Optional[str] = field(default=None)
+    report_note_path: Optional[str] = field(default=None)
+    todo_items: List[TodoItem] = field(default_factory=list)

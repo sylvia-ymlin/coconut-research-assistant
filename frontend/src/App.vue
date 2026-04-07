@@ -26,13 +26,16 @@
         :search-api="form.searchApi"
         :total-tasks="totalTasks"
         :completed-tasks="completedTasks"
+        :sessions="sessionHistory"
+        :active-session-id="currentSessionId"
         @go-back="goBack"
+        @open-session="openSession"
         @start-new-research="startNewResearch"
       />
 
       <section
         class="panel panel-result"
-        v-if="todoTasks.length || reportMarkdown || progressLogs.length"
+        v-if="todoTasks.length || reportMarkdown || progressLogs.length || !loading"
       >
         <ProgressTimeline
           :loading="loading"
@@ -95,7 +98,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onBeforeUnmount, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
 import ProgressTimeline from "./components/ProgressTimeline.vue";
 import ReportPanel from "./components/ReportPanel.vue";
@@ -104,10 +107,17 @@ import ResearchSidebar from "./components/ResearchSidebar.vue";
 import TaskDetail from "./components/TaskDetail.vue";
 import TaskList from "./components/TaskList.vue";
 import {
+  getResearchSession,
+  getResearchSessions,
   runResearchStream,
   type ResearchStreamEvent
 } from "./services/api";
-import type { SourceItem, TodoTaskView } from "./types/research";
+import type {
+  ResearchSessionDetail,
+  ResearchSessionSummary,
+  SourceItem,
+  TodoTaskView
+} from "./types/research";
 
 const form = reactive({
   topic: "",
@@ -119,6 +129,9 @@ const error = ref("");
 const progressLogs = ref<string[]>([]);
 const logsCollapsed = ref(false);
 const isExpanded = ref(false);
+const sessionHistory = ref<ResearchSessionSummary[]>([]);
+const currentSessionId = ref<number | null>(null);
+const currentSessionStatus = ref<string>("idle");
 
 const todoTasks = ref<TodoTaskView[]>([]);
 const activeTaskId = ref<number | null>(null);
@@ -144,7 +157,8 @@ const TASK_STATUS_LABEL: Record<string, string> = {
   pending: "待执行",
   in_progress: "进行中",
   completed: "已完成",
-  skipped: "已跳过"
+  skipped: "已跳过",
+  failed: "失败"
 };
 
 function formatTaskStatus(status: string): string {
@@ -162,6 +176,75 @@ const currentTask = computed(() => {
   }
   return todoTasks.value[0] ?? null;
 });
+
+function mapTodoTask(item: {
+  id: number;
+  title: string;
+  intent: string;
+  query: string;
+  status: string;
+  summary?: string | null;
+  sources_summary?: string | null;
+  notices?: string[];
+  note_id?: string | null;
+  note_path?: string | null;
+}): TodoTaskView {
+  const sourcesSummary = item.sources_summary?.trim() || "";
+
+  return {
+    id: item.id,
+    title: item.title?.trim() || `任务${item.id}`,
+    intent: item.intent?.trim() || "探索与主题相关的关键信息",
+    query: item.query?.trim() || form.topic.trim(),
+    status: item.status?.trim() || "pending",
+    summary: item.summary?.trim() || "",
+    sourcesSummary,
+    sourceItems: sourcesSummary ? parseSources(sourcesSummary) : [],
+    notices: Array.isArray(item.notices) ? [...item.notices] : [],
+    noteId: item.note_id?.trim() || null,
+    notePath: item.note_path?.trim() || null,
+    toolCalls: []
+  };
+}
+
+function applySessionDetail(detail: ResearchSessionDetail): void {
+  currentSessionId.value = detail.session_id;
+  currentSessionStatus.value = detail.status;
+  form.topic = detail.topic;
+  form.searchApi = detail.search_api || "";
+  todoTasks.value = detail.todo_items.map(mapTodoTask);
+  activeTaskId.value = todoTasks.value[0]?.id ?? null;
+  reportMarkdown.value = detail.report_markdown?.trim() || "";
+  resultView.value = reportMarkdown.value ? "report" : "task";
+  progressLogs.value = detail.error_detail
+    ? [`该研究运行失败：${detail.error_detail}`]
+    : [`已载入历史研究：${detail.topic}`];
+  error.value = detail.error_detail || "";
+  isExpanded.value = true;
+}
+
+async function refreshSessions(): Promise<void> {
+  try {
+    sessionHistory.value = await getResearchSessions();
+  } catch (err) {
+    console.warn("加载历史会话失败", err);
+  }
+}
+
+async function openSession(sessionId: number): Promise<void> {
+  if (loading.value) {
+    return;
+  }
+
+  error.value = "";
+  try {
+    const detail = await getResearchSession(sessionId);
+    resetWorkflowState();
+    applySessionDetail(detail);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "载入历史研究失败";
+  }
+}
 
 const pulse = (flag: typeof summaryHighlight) => {
   flag.value = false;
@@ -360,6 +443,7 @@ function resetWorkflowState() {
   reportMarkdown.value = "";
   resultView.value = "task";
   progressLogs.value = [];
+  currentSessionStatus.value = "idle";
   summaryHighlight.value = false;
   sourcesHighlight.value = false;
   reportHighlight.value = false;
@@ -407,6 +491,8 @@ const handleSubmit = async () => {
   error.value = "";
   isExpanded.value = true;
   resetWorkflowState();
+  currentSessionId.value = null;
+  currentSessionStatus.value = "running";
 
   const controller = new AbortController();
   currentController = controller;
@@ -420,6 +506,23 @@ const handleSubmit = async () => {
     await runResearchStream(
       payload,
       (event: ResearchStreamEvent) => {
+        if (event.type === "session") {
+          const numericId =
+            typeof event.session_id === "number"
+              ? event.session_id
+              : typeof event.session_id === "string"
+              ? Number(event.session_id)
+              : NaN;
+          if (!Number.isNaN(numericId)) {
+            currentSessionId.value = numericId;
+            progressLogs.value.push(`已创建研究会话 #${numericId}`);
+          }
+          if (typeof event.status === "string" && event.status.trim()) {
+            currentSessionStatus.value = event.status.trim();
+          }
+          return;
+        }
+
         if (event.type === "status") {
           const message =
             typeof event.message === "string" && event.message.trim()
@@ -449,16 +552,7 @@ const handleSubmit = async () => {
                 ? Number(item.id)
                 : index + 1;
             const id = Number.isFinite(rawId) ? Number(rawId) : index + 1;
-            const noteId =
-              typeof item.note_id === "string" && item.note_id.trim()
-                ? item.note_id.trim()
-                : null;
-            const notePath =
-              typeof item.note_path === "string" && item.note_path.trim()
-                ? item.note_path.trim()
-                : null;
-
-            return {
+            return mapTodoTask({
               id,
               title:
                 typeof item.title === "string" && item.title.trim()
@@ -476,14 +570,15 @@ const handleSubmit = async () => {
                 typeof item.status === "string" && item.status.trim()
                   ? item.status.trim()
                   : "pending",
-              summary: "",
-              sourcesSummary: "",
-              sourceItems: [],
-              notices: [],
-              noteId,
-              notePath,
-              toolCalls: []
-            } as TodoTaskView;
+              note_id:
+                typeof item.note_id === "string" && item.note_id.trim()
+                  ? item.note_id.trim()
+                  : null,
+              note_path:
+                typeof item.note_path === "string" && item.note_path.trim()
+                  ? item.note_path.trim()
+                  : null
+            });
           });
 
           if (todoTasks.value.length) {
@@ -648,6 +743,7 @@ const handleSubmit = async () => {
               ? event.report.trim()
               : "";
           reportMarkdown.value = report || "报告生成失败，未获得有效内容";
+          currentSessionStatus.value = "completed";
           resultView.value = "report";
           pulse(reportHighlight);
           progressLogs.value.push("最终报告已生成");
@@ -660,6 +756,7 @@ const handleSubmit = async () => {
               ? event.detail
               : "研究过程中发生错误";
           error.value = detail;
+          currentSessionStatus.value = "failed";
           progressLogs.value.push("研究失败，已停止流程");
         }
       },
@@ -669,17 +766,20 @@ const handleSubmit = async () => {
     if (!reportMarkdown.value) {
       reportMarkdown.value = "暂无生成的报告";
     }
+    await refreshSessions();
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       progressLogs.value.push("已取消当前研究任务");
     } else {
       error.value = err instanceof Error ? err.message : "请求失败";
+      currentSessionStatus.value = "failed";
     }
   } finally {
     loading.value = false;
     if (currentController === controller) {
       currentController = null;
     }
+    await refreshSessions();
   }
 };
 
@@ -703,10 +803,18 @@ const startNewResearch = () => {
     cancelResearch();
   }
   resetWorkflowState();
+  currentSessionId.value = null;
   isExpanded.value = false;
   form.topic = "";
   form.searchApi = "";
 };
+
+onMounted(async () => {
+  await refreshSessions();
+  if (sessionHistory.value.length > 0) {
+    await openSession(sessionHistory.value[0].session_id);
+  }
+});
 
 onBeforeUnmount(() => {
   if (currentController) {
@@ -1981,6 +2089,28 @@ select:focus {
   gap: 8px;
 }
 
+.history-section {
+  min-height: 0;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-count {
+  min-width: 28px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .info-item label {
   font-size: 12px;
   font-weight: 600;
@@ -2025,6 +2155,104 @@ select:focus {
   font-size: 13px !important;
   color: #64748b !important;
   font-weight: 500;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(248, 250, 252, 0.95);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.session-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.session-card.active {
+  border-color: rgba(59, 130, 246, 0.7);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(248, 250, 252, 0.98));
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.12);
+}
+
+.session-card:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.session-card-top,
+.session-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-topic {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.session-time,
+.session-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.session-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.session-status[data-status="running"] {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.session-status[data-status="completed"] {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.session-status[data-status="failed"] {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.history-empty {
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.8);
+  color: #64748b;
+  font-size: 14px;
 }
 
 .sidebar-actions {

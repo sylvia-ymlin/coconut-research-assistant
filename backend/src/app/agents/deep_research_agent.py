@@ -29,6 +29,7 @@ from app.models.domain import SummaryState, SummaryStateOutput, TodoItem
 from app.services.planner import PlanningService
 from app.services.reporter import ReportingService
 from app.services.search import dispatch_search, prepare_research_context
+from app.services.sessions import SessionRepository
 from app.services.summarizer import SummarizationService
 from app.services.tool_events import ToolCallTracker
 
@@ -38,9 +39,17 @@ logger = logging.getLogger(__name__)
 class DeepResearchAgent:
     """Coordinator orchestrating TODO-based research workflow using HelloAgents."""
 
-    def __init__(self, config: Configuration | None = None) -> None:
+    def __init__(
+        self,
+        config: Configuration | None = None,
+        *,
+        session_repository: SessionRepository | None = None,
+        session_id: int | None = None,
+    ) -> None:
         """Initialise the coordinator with configuration and shared tools."""
         self.config = config or Configuration.from_env()
+        self.session_repository = session_repository
+        self.session_id = session_id
         self.llm = self._init_llm()
 
         self.note_tool = (
@@ -134,13 +143,15 @@ class DeepResearchAgent:
 
     def run(self, topic: str) -> SummaryStateOutput:
         """Execute the research workflow and return the final report."""
-        state = SummaryState(research_topic=topic)
+        state = SummaryState(research_topic=topic, session_id=self.session_id)
         state.todo_items = self.planner.plan_todo_list(state)
+        self._persist_task_list(state)
         self._drain_tool_events(state)
 
         if not state.todo_items:
             logger.info("No TODO items generated; falling back to single task")
             state.todo_items = [self.planner.create_fallback_task(state)]
+            self._persist_task_list(state)
 
         for task in state.todo_items:
             self._execute_task(state, task, emit_stream=False)
@@ -155,19 +166,29 @@ class DeepResearchAgent:
             running_summary=report,
             report_markdown=report,
             todo_items=state.todo_items,
+            session_id=self.session_id,
         )
 
     def run_stream(self, topic: str) -> Iterator[dict[str, Any]]:
         """Execute the workflow yielding incremental progress events."""
-        state = SummaryState(research_topic=topic)
+        state = SummaryState(research_topic=topic, session_id=self.session_id)
         logger.debug("Starting streaming research: topic=%s", topic)
+        if self.session_id is not None:
+            yield {
+                "type": "session",
+                "session_id": self.session_id,
+                "status": "running",
+                "topic": topic,
+            }
         yield {"type": "status", "message": "初始化研究流程"}
 
         state.todo_items = self.planner.plan_todo_list(state)
+        self._persist_task_list(state)
         for event in self._drain_tool_events(state, step=0):
             yield event
         if not state.todo_items:
             state.todo_items = [self.planner.create_fallback_task(state)]
+            self._persist_task_list(state)
 
         channel_map: dict[int, dict[str, Any]] = {}
         for index, task in enumerate(state.todo_items, start=1):
@@ -229,6 +250,9 @@ class DeepResearchAgent:
                     enqueue(event, task=task)
             except Exception as exc:  # pragma: no cover - defensive guardrail
                 logger.exception("Task execution failed", exc_info=exc)
+                task.status = "failed"
+                task.summary = str(exc)
+                self._persist_task(task)
                 enqueue(
                     {
                         "type": "task_status",
@@ -288,6 +312,7 @@ class DeepResearchAgent:
         yield {
             "type": "final_report",
             "report": report,
+            "session_id": self.session_id,
             "note_id": state.report_note_id,
             "note_path": state.report_note_path,
         }
@@ -306,6 +331,7 @@ class DeepResearchAgent:
     ) -> Iterator[dict[str, Any]]:
         """Run search + summarization for a single task."""
         task.status = "in_progress"
+        self._persist_task(task)
 
         search_result, notices, answer_text, backend = dispatch_search(
             task.query,
@@ -333,6 +359,7 @@ class DeepResearchAgent:
 
         if not search_result or not search_result.get("results"):
             task.status = "skipped"
+            self._persist_task(task)
             if emit_stream:
                 for event in self._drain_tool_events(state, step=step):
                     yield event
@@ -405,6 +432,7 @@ class DeepResearchAgent:
 
         task.summary = summary_text.strip() if summary_text else "暂无可用信息"
         task.status = "completed"
+        self._persist_task(task)
 
         if emit_stream:
             for event in self._drain_tool_events(state, step=step):
@@ -456,6 +484,7 @@ class DeepResearchAgent:
 
     def _persist_final_report(self, state: SummaryState, report: str) -> dict[str, Any] | None:
         if not self.note_tool or not report or not report.strip():
+            self._mark_session_completed(state, report)
             return None
 
         note_title = f"研究报告：{state.research_topic}".strip() or "研究报告"
@@ -492,6 +521,7 @@ class DeepResearchAgent:
             note_id = self._extract_note_id_from_text(response)
 
         if not note_id:
+            self._mark_session_completed(state, report)
             return None
 
         state.report_note_id = note_id
@@ -510,7 +540,28 @@ class DeepResearchAgent:
         if note_path:
             payload["note_path"] = str(note_path)
 
+        self._mark_session_completed(state, report)
         return payload
+
+    def _persist_task_list(self, state: SummaryState) -> None:
+        if self.session_repository is None or self.session_id is None:
+            return
+        self.session_repository.replace_tasks(self.session_id, state.todo_items)
+
+    def _persist_task(self, task: TodoItem) -> None:
+        if self.session_repository is None or self.session_id is None:
+            return
+        self.session_repository.upsert_task(self.session_id, task)
+
+    def _mark_session_completed(self, state: SummaryState, report: str) -> None:
+        if self.session_repository is None or self.session_id is None:
+            return
+        self.session_repository.mark_completed(
+            self.session_id,
+            report_markdown=report,
+            report_note_id=state.report_note_id,
+            report_note_path=state.report_note_path,
+        )
 
     def _find_existing_report_note_id(self, state: SummaryState) -> str | None:
         if state.report_note_id:
