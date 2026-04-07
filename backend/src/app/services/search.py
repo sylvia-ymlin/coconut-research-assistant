@@ -16,7 +16,16 @@ from app.integrations.hello_agents import create_search_tool
 logger = logging.getLogger(__name__)
 
 MAX_TOKENS_PER_SOURCE = 2000
-_GLOBAL_SEARCH_TOOL = create_search_tool(backend="hybrid")
+_GLOBAL_SEARCH_TOOL = None
+
+
+def _get_search_tool():
+    """Create the shared SearchTool lazily after environment loading."""
+
+    global _GLOBAL_SEARCH_TOOL
+    if _GLOBAL_SEARCH_TOOL is None:
+        _GLOBAL_SEARCH_TOOL = create_search_tool(backend="hybrid")
+    return _GLOBAL_SEARCH_TOOL
 
 
 def dispatch_search(
@@ -27,9 +36,10 @@ def dispatch_search(
     """Execute configured search backend and normalise response payload."""
 
     search_api = get_config_value(config.search_api)
+    search_tool = _get_search_tool()
 
     try:
-        raw_response = _GLOBAL_SEARCH_TOOL.run(
+        raw_response = search_tool.run(
             {
                 "input": query,
                 "backend": search_api,

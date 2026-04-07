@@ -40,10 +40,32 @@
           :total-tasks="totalTasks"
           :progress-logs="progressLogs"
           :logs-collapsed="logsCollapsed"
+          :show-report-button="Boolean(reportMarkdown)"
           @toggle-logs="logsCollapsed = !logsCollapsed"
+          @view-report="resultView = 'report'"
         />
 
-        <div class="tasks-section" v-if="todoTasks.length">
+        <div class="result-switcher" v-if="todoTasks.length || reportMarkdown">
+          <button
+            type="button"
+            class="result-switcher-btn"
+            :class="{ active: resultView === 'task' }"
+            @click="resultView = 'task'"
+          >
+            任务详情
+          </button>
+          <button
+            type="button"
+            class="result-switcher-btn"
+            :class="{ active: resultView === 'report' }"
+            :disabled="!reportMarkdown"
+            @click="resultView = 'report'"
+          >
+            最终报告
+          </button>
+        </div>
+
+        <div class="tasks-section" v-if="resultView === 'task' && todoTasks.length">
           <TaskList
             :tasks="todoTasks"
             :active-task-id="activeTaskId"
@@ -63,6 +85,7 @@
         </div>
 
         <ReportPanel
+          v-if="resultView === 'report'"
           :report-markdown="reportMarkdown"
           :report-highlight="reportHighlight"
         />
@@ -100,6 +123,7 @@ const isExpanded = ref(false);
 const todoTasks = ref<TodoTaskView[]>([]);
 const activeTaskId = ref<number | null>(null);
 const reportMarkdown = ref("");
+const resultView = ref<"task" | "report">("task");
 
 const summaryHighlight = ref(false);
 const sourcesHighlight = ref(false);
@@ -334,6 +358,7 @@ function resetWorkflowState() {
   todoTasks.value = [];
   activeTaskId.value = null;
   reportMarkdown.value = "";
+  resultView.value = "task";
   progressLogs.value = [];
   summaryHighlight.value = false;
   sourcesHighlight.value = false;
@@ -623,6 +648,7 @@ const handleSubmit = async () => {
               ? event.report.trim()
               : "";
           reportMarkdown.value = report || "报告生成失败，未获得有效内容";
+          resultView.value = "report";
           pulse(reportHighlight);
           progressLogs.value.push("最终报告已生成");
           return;
@@ -1019,6 +1045,12 @@ select:focus {
 .status-controls {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-cta {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(124, 58, 237, 0.16));
+  border-color: rgba(99, 102, 241, 0.35);
 }
 
 .status-chip {
@@ -1137,6 +1169,39 @@ select:focus {
   grid-template-columns: 280px 1fr;
   gap: 20px;
   align-items: start;
+}
+
+.result-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  align-self: flex-start;
+}
+
+.result-switcher-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.result-switcher-btn.active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(124, 58, 237, 0.14));
+  color: #1e3a8a;
+}
+
+.result-switcher-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 @media (max-width: 960px) {
@@ -1364,6 +1429,35 @@ select:focus {
 
 .task-notices li {
   font-size: 13px;
+}
+
+.detail-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  align-self: flex-start;
+}
+
+.detail-tab {
+  border: none;
+  background: transparent;
+  color: #475569;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.detail-tab.active {
+  background: rgba(255, 255, 255, 0.96);
+  color: #1e3a8a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .report-block {

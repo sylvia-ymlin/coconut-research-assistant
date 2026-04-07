@@ -1,8 +1,10 @@
 import os
 from enum import Enum
+from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 
 class SearchAPI(Enum):
@@ -91,6 +93,9 @@ class Configuration(BaseModel):
     def from_env(cls, overrides: Optional[dict[str, Any]] = None) -> "Configuration":
         """Create a configuration object using environment variables and overrides."""
 
+        env_path = Path(__file__).resolve().parents[3] / ".env"
+        load_dotenv(env_path, override=False)
+
         raw_values: dict[str, Any] = {}
 
         # Load values from environment variables based on field names
@@ -140,4 +145,3 @@ class Configuration(BaseModel):
         """Best-effort resolution of the model identifier to use."""
 
         return self.llm_model_id or self.local_llm
-

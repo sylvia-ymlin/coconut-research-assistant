@@ -84,11 +84,15 @@ class DeepResearchAgent:
     # ------------------------------------------------------------------
     def _init_llm(self) -> LLMClient:
         """Instantiate HelloAgentsLLM following configuration preferences."""
-        llm_kwargs: dict[str, Any] = {"temperature": 0.0}
+        llm_kwargs: dict[str, Any] = {}
 
         model_id = self.config.llm_model_id or self.config.local_llm
         if model_id:
             llm_kwargs["model"] = model_id
+
+        # DeepSeek reasoning models reject temperature/top_p style sampling params.
+        if model_id != "deepseek-reasoner":
+            llm_kwargs["temperature"] = 0.0
 
         provider = (self.config.llm_provider or "").strip()
         if provider:

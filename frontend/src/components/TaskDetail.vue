@@ -43,7 +43,45 @@
       </ul>
     </section>
 
+    <div class="detail-tabs">
+      <button
+        type="button"
+        class="detail-tab"
+        :class="{ active: activeTab === 'summary' }"
+        @click="activeTab = 'summary'"
+      >
+        总结
+      </button>
+      <button
+        type="button"
+        class="detail-tab"
+        :class="{ active: activeTab === 'sources' }"
+        @click="activeTab = 'sources'"
+      >
+        来源
+      </button>
+      <button
+        v-if="task.toolCalls.length"
+        type="button"
+        class="detail-tab"
+        :class="{ active: activeTab === 'tools' }"
+        @click="activeTab = 'tools'"
+      >
+        工具调用
+      </button>
+    </div>
+
     <section
+      v-if="activeTab === 'summary'"
+      class="summary-block"
+      :class="{ 'block-highlight': summaryHighlight }"
+    >
+      <h3>任务总结</h3>
+      <pre class="block-pre">{{ task.summary || "暂无可用信息" }}</pre>
+    </section>
+
+    <section
+      v-else-if="activeTab === 'sources'"
       class="sources-block"
       :class="{ 'block-highlight': sourcesHighlight }"
     >
@@ -74,17 +112,9 @@
     </section>
 
     <section
-      class="summary-block"
-      :class="{ 'block-highlight': summaryHighlight }"
-    >
-      <h3>任务总结</h3>
-      <pre class="block-pre">{{ task.summary || "暂无可用信息" }}</pre>
-    </section>
-
-    <section
+      v-else-if="activeTab === 'tools'"
       class="tools-block"
       :class="{ 'block-highlight': toolHighlight }"
-      v-if="task.toolCalls.length"
     >
       <h3>工具调用记录</h3>
       <ul class="tool-list">
@@ -132,9 +162,11 @@
 </template>
 
 <script lang="ts" setup>
+import { ref, watch } from "vue";
+
 import type { TodoTaskView } from "../types/research";
 
-defineProps<{
+const props = defineProps<{
   task: TodoTaskView | null;
   summaryHighlight: boolean;
   sourcesHighlight: boolean;
@@ -143,4 +175,13 @@ defineProps<{
   formatToolParameters: (parameters: Record<string, unknown>) => string;
   formatToolResult: (result: string) => string;
 }>();
+
+const activeTab = ref<"summary" | "sources" | "tools">("summary");
+
+watch(
+  () => props.task?.id,
+  () => {
+    activeTab.value = "summary";
+  }
+);
 </script>

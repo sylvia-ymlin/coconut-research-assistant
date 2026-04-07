@@ -2,7 +2,7 @@
 
 A full-stack research agent application for planning, executing, and synthesizing multi-step web research.
 
-This project is built as a portfolio-grade evolution of the original deep research example. It focuses on agent orchestration, streaming UX, structured task execution, and report generation, while being refactored into a cleaner software architecture suitable for continued extension.
+It combines agent orchestration, streaming execution, structured task handling, and report generation in a UI that makes intermediate reasoning artifacts visible and reviewable.
 
 ## What It Does
 
@@ -11,6 +11,20 @@ This project is built as a portfolio-grade evolution of the original deep resear
 - streams progress updates to the frontend in real time
 - tracks task status, sources, notes, and tool calls
 - synthesizes a final Markdown report from intermediate results
+
+## Screenshots
+
+### Streaming Workflow
+
+![Streaming Workflow](docs/images/streaming-workflow.png)
+
+### Task Detail
+
+![Task Detail](docs/images/task-detail.png)
+
+### Final Report
+
+![Final Report](docs/images/final-report.png)
 
 ## Why This Project
 
@@ -79,7 +93,6 @@ Current frontend responsibilities:
 
 Completed:
 
-- project extracted into its own repository structure
 - backend refactored into an `app/...` layout
 - frontend split into reusable components
 - backend startup verified locally
@@ -88,12 +101,10 @@ Completed:
 In progress:
 
 - tightening dependency management
-- improving README/project presentation
 - preparing framework integration boundaries for future abstraction
 
 Planned:
 
-- isolate `hello-agents` usage behind a dedicated integration layer
 - add session/state persistence
 - add tests for backend workflow pieces
 - improve deployment and demo documentation
@@ -114,7 +125,7 @@ python src/main.py
 
 Notes:
 
-- This project currently depends on `hello-agents`.
+- This project currently uses `hello-agents` as the underlying agent runtime.
 - If startup fails because of a missing dependency in the chain, install the missing package in the same environment and retry.
 - To enable stronger web research results, configure at least one search provider such as `TAVILY_API_KEY` in `backend/.env`.
 
@@ -144,9 +155,4 @@ The streaming endpoint is used by the frontend to render incremental workflow pr
 
 ## Repository Goal
 
-The long-term goal of this repository is not only to ship a working research agent UI, but also to use it as a vehicle for learning:
-
-- how to structure agent applications beyond toy demos
-- how to integrate and eventually abstract an agent framework
-- how to expose intermediate agent state to users in a usable way
-- how to grow an agent project into a cleaner, more maintainable system
+The project is intended to evolve toward a more production-ready research workflow application with clearer framework boundaries, stronger state handling, and broader test coverage.

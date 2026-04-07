@@ -11,6 +11,13 @@
       </span>
     </div>
     <div class="status-controls">
+      <button
+        v-if="showReportButton"
+        class="secondary-btn report-cta"
+        @click="$emit('viewReport')"
+      >
+        查看最终报告
+      </button>
       <button class="secondary-btn" @click="$emit('toggleLogs')">
         {{ logsCollapsed ? "展开流程" : "收起流程" }}
       </button>
@@ -36,10 +43,12 @@ const props = defineProps<{
   totalTasks: number;
   progressLogs: string[];
   logsCollapsed: boolean;
+  showReportButton: boolean;
 }>();
 
 defineEmits<{
   toggleLogs: [];
+  viewReport: [];
 }>();
 
 const effectiveTotalTasks = computed(() => props.totalTasks || 1);
