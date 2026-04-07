@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from typing import Tuple
 
-from hello_agents import ToolAwareSimpleAgent
-
 from app.core.config import Configuration
 from app.core.utils import strip_thinking_tokens
+from app.integrations.hello_agents import ToolAwareAgent
 from app.models.domain import SummaryState, TodoItem
 from app.services.notes import build_note_guidance
 from app.services.text_processing import strip_tool_calls
@@ -19,7 +18,7 @@ class SummarizationService:
 
     def __init__(
         self,
-        summarizer_factory: Callable[[], ToolAwareSimpleAgent],
+        summarizer_factory: Callable[[], ToolAwareAgent],
         config: Configuration,
     ) -> None:
         self._agent_factory = summarizer_factory

@@ -9,15 +9,21 @@ from queue import Empty, Queue
 from threading import Lock, Thread
 from typing import Any, Callable, Iterator
 
-from hello_agents import HelloAgentsLLM, ToolAwareSimpleAgent
-from hello_agents.tools import ToolRegistry
-from hello_agents.tools.builtin.note_tool import NoteTool
-
 from app.core.config import Configuration
 from app.core.prompts import (
     report_writer_instructions,
     task_summarizer_instructions,
     todo_planner_system_prompt,
+)
+from app.integrations.hello_agents import (
+    LLMClient,
+    NoteToolAdapter,
+    ToolAwareAgent,
+    ToolRegistryAdapter,
+    create_llm_client,
+    create_note_tool,
+    create_tool_aware_agent,
+    create_tool_registry,
 )
 from app.models.domain import SummaryState, SummaryStateOutput, TodoItem
 from app.services.planner import PlanningService
@@ -38,13 +44,13 @@ class DeepResearchAgent:
         self.llm = self._init_llm()
 
         self.note_tool = (
-            NoteTool(workspace=self.config.notes_workspace)
+            create_note_tool(workspace=self.config.notes_workspace)
             if self.config.enable_notes
             else None
         )
-        self.tools_registry: ToolRegistry | None = None
+        self.tools_registry: ToolRegistryAdapter | None = None
         if self.note_tool:
-            registry = ToolRegistry()
+            registry = create_tool_registry()
             registry.register_tool(self.note_tool)
             self.tools_registry = registry
 
@@ -63,7 +69,7 @@ class DeepResearchAgent:
             system_prompt=report_writer_instructions.strip(),
         )
 
-        self._summarizer_factory: Callable[[], ToolAwareSimpleAgent] = lambda: self._create_tool_aware_agent(  # noqa: E501
+        self._summarizer_factory: Callable[[], ToolAwareAgent] = lambda: self._create_tool_aware_agent(  # noqa: E501
             name="任务总结专家",
             system_prompt=task_summarizer_instructions.strip(),
         )
@@ -76,7 +82,7 @@ class DeepResearchAgent:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def _init_llm(self) -> HelloAgentsLLM:
+    def _init_llm(self) -> LLMClient:
         """Instantiate HelloAgentsLLM following configuration preferences."""
         llm_kwargs: dict[str, Any] = {"temperature": 0.0}
 
@@ -104,11 +110,11 @@ class DeepResearchAgent:
             if self.config.llm_api_key:
                 llm_kwargs["api_key"] = self.config.llm_api_key
 
-        return HelloAgentsLLM(**llm_kwargs)
+        return create_llm_client(**llm_kwargs)
 
-    def _create_tool_aware_agent(self, *, name: str, system_prompt: str) -> ToolAwareSimpleAgent:
+    def _create_tool_aware_agent(self, *, name: str, system_prompt: str) -> ToolAwareAgent:
         """Instantiate a ToolAwareSimpleAgent sharing tool registry and tracker."""
-        return ToolAwareSimpleAgent(
+        return create_tool_aware_agent(
             name=name,
             llm=self.llm,
             system_prompt=system_prompt,

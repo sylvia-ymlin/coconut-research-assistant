@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 
-from hello_agents import ToolAwareSimpleAgent
-
 from app.core.config import Configuration
 from app.core.utils import strip_thinking_tokens
+from app.integrations.hello_agents import ToolAwareAgent
 from app.models.domain import SummaryState
 from app.services.text_processing import strip_tool_calls
 
@@ -15,7 +14,7 @@ from app.services.text_processing import strip_tool_calls
 class ReportingService:
     """Generates the final structured report."""
 
-    def __init__(self, report_agent: ToolAwareSimpleAgent, config: Configuration) -> None:
+    def __init__(self, report_agent: ToolAwareAgent, config: Configuration) -> None:
         self._agent = report_agent
         self._config = config
 

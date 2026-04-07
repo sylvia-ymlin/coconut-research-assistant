@@ -7,11 +7,10 @@ import logging
 import re
 from typing import Any, List, Optional
 
-from hello_agents import ToolAwareSimpleAgent
-
 from app.core.config import Configuration
 from app.core.prompts import get_current_date, todo_planner_instructions
 from app.core.utils import strip_thinking_tokens
+from app.integrations.hello_agents import ToolAwareAgent
 from app.models.domain import SummaryState, TodoItem
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ TOOL_CALL_PATTERN = re.compile(
 class PlanningService:
     """Wraps the planner agent to produce structured TODO items."""
 
-    def __init__(self, planner_agent: ToolAwareSimpleAgent, config: Configuration) -> None:
+    def __init__(self, planner_agent: ToolAwareAgent, config: Configuration) -> None:
         self._agent = planner_agent
         self._config = config
 

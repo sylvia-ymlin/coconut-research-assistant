@@ -5,19 +5,18 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional, Tuple
 
-from hello_agents.tools import SearchTool
-
 from app.core.config import Configuration
 from app.core.utils import (
     deduplicate_and_format_sources,
     format_sources,
     get_config_value,
 )
+from app.integrations.hello_agents import create_search_tool
 
 logger = logging.getLogger(__name__)
 
 MAX_TOKENS_PER_SOURCE = 2000
-_GLOBAL_SEARCH_TOOL = SearchTool(backend="hybrid")
+_GLOBAL_SEARCH_TOOL = create_search_tool(backend="hybrid")
 
 
 def dispatch_search(

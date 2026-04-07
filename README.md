@@ -1,29 +1,106 @@
 # Coconut Research Assistant
 
-A research-oriented agent application built on top of HelloAgents.
+A full-stack research agent application for planning, executing, and synthesizing multi-step web research.
 
-This repository is initialized from the `chapter14` deep research example and will be evolved into a standalone portfolio project with:
+This project is built as a portfolio-grade evolution of the original deep research example. It focuses on agent orchestration, streaming UX, structured task execution, and report generation, while being refactored into a cleaner software architecture suitable for continued extension.
 
-- task planning and decomposition
-- tool-using web research
-- streaming execution updates
-- task-level notes and traceability
-- final report synthesis
+## What It Does
 
-## Current Structure
+- breaks a research topic into actionable tasks
+- runs tool-using web research for each task
+- streams progress updates to the frontend in real time
+- tracks task status, sources, notes, and tool calls
+- synthesizes a final Markdown report from intermediate results
+
+## Why This Project
+
+Most agent demos stop at a single prompt-response loop. This project is designed to look more like a real agent application:
+
+- a backend orchestration layer instead of a single script
+- structured task planning and execution
+- observable intermediate state
+- a frontend that shows live progress rather than only final output
+- room to grow into memory, session persistence, and framework abstraction
+
+## Architecture
+
+### Backend
+
+The backend is a FastAPI application organized under `backend/src/app`:
 
 ```text
-coconut-research-assistant/
-├── backend/
-└── frontend/
+backend/src/app/
+├── agents/     # agent orchestration
+├── api/        # FastAPI app, routes, request/response schemas
+├── core/       # config, prompts, shared utilities
+├── models/     # workflow state and domain models
+└── services/   # planning, search, summarization, reporting, tool events
 ```
 
+Current backend responsibilities:
 
-## Backend
+- `api`: HTTP entrypoints and SSE streaming endpoints
+- `agents`: top-level research workflow coordination
+- `services`: planning, search dispatch, summarization, reporting, note/tool event handling
+- `core`: configuration loading and prompt definitions
 
-The backend is a FastAPI service that orchestrates the research workflow.
+### Frontend
 
-Quick start:
+The frontend is a Vue 3 + Vite application. It has been split from a monolithic `App.vue` into smaller UI components:
+
+```text
+frontend/src/
+├── components/
+│   ├── ResearchInputPanel.vue
+│   ├── ResearchSidebar.vue
+│   ├── ProgressTimeline.vue
+│   ├── TaskList.vue
+│   ├── TaskDetail.vue
+│   └── ReportPanel.vue
+├── services/
+├── types/
+└── App.vue
+```
+
+Current frontend responsibilities:
+
+- submit research topics and optional search backend selection
+- subscribe to streaming backend events
+- display task timeline, task-level details, tool calls, and final report
+
+## Tech Stack
+
+- Backend: Python, FastAPI, Pydantic, Loguru
+- Frontend: Vue 3, TypeScript, Vite
+- Agent framework: `hello-agents`
+- Search backends: configurable via environment and HelloAgents tooling
+
+## Current Status
+
+Completed:
+
+- project extracted into its own repository structure
+- backend refactored into an `app/...` layout
+- frontend split into reusable components
+- backend startup verified locally
+- frontend production build verified locally
+
+In progress:
+
+- tightening dependency management
+- improving README/project presentation
+- preparing framework integration boundaries for future abstraction
+
+Planned:
+
+- isolate `hello-agents` usage behind a dedicated integration layer
+- add session/state persistence
+- add tests for backend workflow pieces
+- improve deployment and demo documentation
+
+## Local Development
+
+### Backend
 
 ```bash
 cd backend
@@ -35,18 +112,13 @@ cp .env.example .env
 python src/main.py
 ```
 
-Note:
+Notes:
 
 - This project currently depends on `hello-agents`.
-- If `hello-agents` is not available from your Python environment, install it first in the environment you use for this project.
-- If startup fails with a missing module from the dependency chain, install the missing package in the same environment and then retry.
-- To enable higher-quality web research, configure at least one search provider such as `TAVILY_API_KEY` in `backend/.env`.
+- If startup fails because of a missing dependency in the chain, install the missing package in the same environment and retry.
+- To enable stronger web research results, configure at least one search provider such as `TAVILY_API_KEY` in `backend/.env`.
 
-## Frontend
-
-The frontend is a Vue 3 + Vite application.
-
-Quick start:
+### Frontend
 
 ```bash
 cd frontend
@@ -54,9 +126,27 @@ npm install
 npm run dev
 ```
 
-## Next Refactor Steps
+Production build:
 
-1. Restructure the backend into `app/api`, `app/agents`, `app/services`, and `app/core`.
-2. Split the frontend `App.vue` into smaller components.
-3. Isolate HelloAgents integration points behind a thin adapter layer.
-4. Add session/state persistence and tests.
+```bash
+npm run build
+```
+
+## API Surface
+
+Main backend endpoints:
+
+- `GET /healthz`
+- `POST /research`
+- `POST /research/stream`
+
+The streaming endpoint is used by the frontend to render incremental workflow progress.
+
+## Repository Goal
+
+The long-term goal of this repository is not only to ship a working research agent UI, but also to use it as a vehicle for learning:
+
+- how to structure agent applications beyond toy demos
+- how to integrate and eventually abstract an agent framework
+- how to expose intermediate agent state to users in a usable way
+- how to grow an agent project into a cleaner, more maintainable system
